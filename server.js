@@ -4,14 +4,13 @@ import cors from "cors";
 import dotenv from "dotenv";
 import http from "http";
 import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
 
 import { activityLogger } from "./middleware/activityLogger.js";
 import { protect } from "./middleware/authMiddleware.js";
-
-// 🔹 Connexion MongoDB
 import connectDB from "./config/dbMonitor.js";
 
-// 🔹 Import des routes
+// 🔹 Routes
 import authRoutes from "./routes/authRoute.js";
 import reservationRoutes from "./routes/reservationsRoute.js";
 import trajetsRoutes from "./routes/trajetsRoute.js";
@@ -21,10 +20,11 @@ import notificationsRoutes from "./routes/notificationsRoute.js";
 import usersRoutes from "./routes/usersRoute.js";
 import monitoringRoutes from "./routes/monitoringRoute.js";
 
-// 🔹 Import du modèle Reservation
+// 🔹 Modèles
 import Reservation from "./models/Reservation.js";
+import User from "./models/User.js";
 
-// 🔹 Import des contrôleurs monitoring
+// 🔹 Contrôleurs monitoring
 import {
   registerAdmin,
   unregisterAdmin,
@@ -35,12 +35,14 @@ import {
 dotenv.config();
 
 // ======================================================
-// ⚙️ INITIALISATION EXPRESS
+// ⚙️ EXPRESS & CONFIGURATION DE BASE
 // ======================================================
 const app = express();
+const server = http.createServer(app);
+connectDB();
 
 // ======================================================
-// 🌍 CONFIGURATION CORS (avant tout autre middleware)
+// 🌍 CONFIGURATION CORS
 // ======================================================
 const allowedOrigins = [
   "http://localhost:3000",
@@ -54,11 +56,11 @@ app.use(
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
       if (origin.startsWith("http://localhost")) {
-        console.log("🟢 CORS accepté (local dev):", origin);
+        console.log("🟢 CORS accepté (local):", origin);
         return callback(null, true);
       }
       if (allowedOrigins.includes(origin)) {
-        console.log("🟢 CORS accepté (liste blanche):", origin);
+        console.log("🟢 CORS accepté (prod):", origin);
         return callback(null, true);
       }
       console.warn("🚫 CORS refusé pour:", origin);
@@ -70,43 +72,28 @@ app.use(
   })
 );
 
-// ======================================================
-// 🧩 MIDDLEWARES GLOBAUX
-// ======================================================
 app.use(express.json());
-
-// 📁 Fichiers statiques
 app.use("/uploads", express.static("uploads"));
-
-// 🔍 Log des origines entrantes (debug)
 app.use((req, res, next) => {
   console.log("🌐 Origine requête :", req.headers.origin);
   next();
 });
 
 // ======================================================
-// 💾 CONNEXION BASE DE DONNÉES
-// ======================================================
-connectDB();
-
-// ======================================================
-// 🔗 ROUTES PUBLIQUES (pas de token requis)
+// 🔗 ROUTES PUBLIQUES
 // ======================================================
 app.get("/", (req, res) => {
   res.json({ message: "Bienvenue sur l’API Kocrou Transport 🚍" });
 });
-
-app.use("/api/auth", authRoutes); // login/register publics
+app.use("/api/auth", authRoutes);
 
 // ======================================================
-// 🔒 ROUTES PROTÉGÉES PAR JWT + activityLogger
+// 🔒 ROUTES PROTÉGÉES
 // ======================================================
 import { Router } from "express";
 const securedRouter = Router();
 
-// Sécurité + journalisation uniquement sur les routes protégées
 securedRouter.use(protect, activityLogger);
-
 securedRouter.use("/api/reservations", reservationRoutes);
 securedRouter.use("/api/trajets", trajetsRoutes);
 securedRouter.use("/api/settings", settingsRoutes);
@@ -118,10 +105,8 @@ securedRouter.use("/api/monitoring", monitoringRoutes);
 app.use("/", securedRouter);
 
 // ======================================================
-// ⚡ SOCKET.IO — MONITORING EN TEMPS RÉEL
+// ⚡ SOCKET.IO SÉCURISÉ (AVEC AUTH JWT)
 // ======================================================
-const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -130,23 +115,42 @@ const io = new Server(server, {
   },
 });
 
-// 🔄 Socket global accessible partout dans l’app
+// ✅ Authentification Socket.io
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      console.warn("🚫 Connexion Socket.io sans token refusée");
+      return next(new Error("Authentication required"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).lean();
+
+    if (!user || !user.isAdmin) {
+      console.warn("🚫 Accès WebSocket refusé pour cet utilisateur");
+      return next(new Error("Not authorized"));
+    }
+
+    socket.user = user; // attache l’admin validé
+    next();
+  } catch (error) {
+    console.error("❌ Erreur d’auth Socket.io :", error.message);
+    next(new Error("Authentication error"));
+  }
+});
+
+// ======================================================
+// 🧠 MONITORING TEMPS RÉEL
+// ======================================================
 app.set("io", io);
 global._io = io;
 
-// 🧠 Suivi en temps réel des connexions et des administrateurs
 io.on("connection", (socket) => {
-  console.log(`🟢 Nouveau client connecté : ${socket.id}`);
-  console.log("🧩 Nombre total de clients connectés :", io.engine.clientsCount);
+  console.log(`🟢 Admin connecté via WebSocket : ${socket.user?.email}`);
 
-  /**
-   * 👑 Un admin rejoint le monitoring
-   */
-  socket.on("admin_join", (data) => {
-    const email = data?.email || "admin_inconnu";
-    registerAdmin(socket, email);
-    console.log(`👑 Admin connecté : ${email}`);
-
+  socket.on("admin_join", () => {
+    registerAdmin(socket, socket.user?.email);
     io.emit("monitoring_update", {
       adminCount: Object.keys(getConnectedAdmins()).length,
       admins: Object.entries(getConnectedAdmins()).map(([email, info]) => ({
@@ -156,30 +160,13 @@ io.on("connection", (socket) => {
     });
   });
 
-  /**
-   * 🔁 Ping d’activité d’un admin
-   */
-  socket.on("admin_ping", (data) => {
-    const email = data?.email;
-    if (email) updateAdminActivity(email);
-
-    io.emit("monitoring_update", {
-      adminCount: Object.keys(getConnectedAdmins()).length,
-      admins: Object.entries(getConnectedAdmins()).map(([email, info]) => ({
-        email,
-        lastActive: info.lastActive,
-      })),
-    });
+  socket.on("admin_ping", () => {
+    updateAdminActivity(socket.user?.email);
   });
 
-  /**
-   * 🚪 Gestion des déconnexions
-   */
   socket.on("disconnect", () => {
     unregisterAdmin(socket.id);
-    console.log(`🔴 Client déconnecté : ${socket.id}`);
-    console.log("📉 Clients restants :", io.engine.clientsCount);
-
+    console.log(`🔴 Admin déconnecté : ${socket.user?.email}`);
     io.emit("monitoring_update", {
       adminCount: Object.keys(getConnectedAdmins()).length,
       admins: Object.entries(getConnectedAdmins()).map(([email, info]) => ({
@@ -190,21 +177,10 @@ io.on("connection", (socket) => {
   });
 });
 
-/**
- * 🧹 REMARQUE IMPORTANTE :
- * Les événements liés aux réservations ("reservation_created", "reservation_deleted")
- * ne doivent PAS être réémis ici.
- * 
- * Ils sont déjà émis directement par les contrôleurs (ex: reservationController.js)
- * via : io.emit("reservation_created", {...})
- * 
- * Cela évite les doublons et garantit la synchronisation Dashboard / Sidebar.
- */
-
-console.log("✅ WebSocket prêt et en écoute sur le même port que l’API");
+console.log("✅ WebSocket sécurisé prêt.");
 
 // ======================================================
-// 🩺 API MONITORING SNAPSHOT
+// 🩺 ENDPOINT MONITORING
 // ======================================================
 app.get("/api/monitoring", async (req, res) => {
   try {
@@ -247,7 +223,7 @@ app.use((err, req, res, next) => {
 });
 
 // ======================================================
-// 🚀 DÉMARRAGE DU SERVEUR
+// 🚀 DÉMARRAGE SERVEUR
 // ======================================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
