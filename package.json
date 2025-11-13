@@ -1,0 +1,31 @@
+{
+  "name": "kocrou-tansport-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+     "start": "node server/server.js",
+  "dev": "nodemon server/server.js",
+  "migrate:places": "node ./scripts/migratePlacesRestantes.js"
+},
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "body-parser": "^1.20.2",
+    "colors": "^1.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.7.1",
+    "multer": "^2.0.2",
+    "dayjs": "^1.11.10",
+    "socket.io": "^4.8.1"
+    
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
