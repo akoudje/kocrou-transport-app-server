@@ -47,6 +47,7 @@ connectDB();
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5000",
+  "https://kocrou-transport-app-client.vercel.app",
   process.env.FRONTEND_URL,
   process.env.DEPLOY_URL,
 ].filter(Boolean);
@@ -110,9 +111,11 @@ app.use("/", securedRouter);
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
+    methods: ["GET", "POST"],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    transports: ["websocket", "polling"],
   },
+  allowEIO3: true, // ✅ compatibilité socket.io v2
 });
 
 // ✅ Authentification Socket.io
@@ -184,10 +187,12 @@ console.log("✅ WebSocket sécurisé prêt.");
 // ======================================================
 app.get("/api/monitoring", async (req, res) => {
   try {
-    const admins = Object.entries(getConnectedAdmins()).map(([email, info]) => ({
-      email,
-      lastActive: info.lastActive,
-    }));
+    const admins = Object.entries(getConnectedAdmins()).map(
+      ([email, info]) => ({
+        email,
+        lastActive: info.lastActive,
+      })
+    );
 
     const recentReservations = await Reservation.find({ statut: "confirmée" })
       .populate("user", "name email")
@@ -203,7 +208,9 @@ app.get("/api/monitoring", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Erreur API /api/monitoring :", error);
-    res.status(500).json({ success: false, message: "Erreur serveur monitoring" });
+    res
+      .status(500)
+      .json({ success: false, message: "Erreur serveur monitoring" });
   }
 });
 
