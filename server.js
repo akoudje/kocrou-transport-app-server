@@ -48,7 +48,8 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5000",
   "https://kocrou-transport-app-client.vercel.app",
-  "https://kocrou-transport-app-client-m58xwyij9-junior-akoudjes-projects.vercel.app", // ✅ DOIT ÊTRE EXACTEMENT CECI
+  "https://kocrou-transport-app-client-m58xwyij9-junior-akoudjes-projects.vercel.app",
+  "https://kocrou-transport-app-client-6ij9djef8-junior-akoudjes-projects.vercel.app",
   process.env.FRONTEND_URL,
   process.env.DEPLOY_URL,
 ].filter(Boolean);
@@ -56,16 +57,34 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
+      // ✅ Autoriser les requêtes locales sans origine (tests Postman, etc.)
       if (!origin) return callback(null, true);
+
+      // ✅ Toujours autoriser localhost
       if (origin.startsWith("http://localhost")) {
         console.log("🟢 CORS accepté (local):", origin);
         return callback(null, true);
       }
-      if (allowedOrigins.some((url) => origin.startsWith(url))) {
+
+      // ✅ Autoriser tous les sous-domaines du projet Vercel
+      if (origin.includes("kocrou-transport-app-client") && origin.endsWith(".vercel.app")) {
+        console.log("🟢 CORS accepté (vercel):", origin);
+        return callback(null, true);
+      }
+
+      // ✅ Autoriser d’autres domaines explicites
+      const allowedOrigins = [
+        "https://kocrou-transport-app-client.vercel.app",
+        process.env.FRONTEND_URL,
+        process.env.DEPLOY_URL,
+      ].filter(Boolean);
+
+      if (allowedOrigins.includes(origin)) {
         console.log("🟢 CORS accepté (prod):", origin);
         return callback(null, true);
       }
 
+      // 🚫 Sinon : refus
       console.warn("🚫 CORS refusé pour:", origin);
       return callback(new Error("Not allowed by CORS"));
     },
@@ -74,6 +93,8 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
+
 
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
