@@ -67,7 +67,10 @@ app.use(
       }
 
       // ✅ Autoriser tous les sous-domaines du projet Vercel
-      if (origin.includes("kocrou-transport-app-client") && origin.endsWith(".vercel.app")) {
+      if (
+        origin.includes("kocrou-transport-app-client") &&
+        origin.endsWith(".vercel.app")
+      ) {
         console.log("🟢 CORS accepté (vercel):", origin);
         return callback(null, true);
       }
@@ -93,8 +96,6 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
-
 
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
@@ -154,6 +155,12 @@ io.use(async (socket, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).lean();
+
+    console.log("🧩 Socket.io Auth OK — Admin connecté :", {
+      email: user?.email,
+      id: user?._id,
+      origin: socket.handshake.headers.origin,
+    });
 
     if (!user || !user.isAdmin) {
       console.warn("🚫 Accès WebSocket refusé pour cet utilisateur");
