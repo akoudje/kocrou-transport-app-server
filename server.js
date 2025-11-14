@@ -48,8 +48,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5000",
   "https://kocrou-transport-app-client.vercel.app",
-  "https://kocrou-transport-app-client-m58xwyij9-junior-akoudjes-projects.vercel.app",
-
+  "https://kocrou-transport-app-client-m58xwyij9-junior-akoudjes-projects.vercel.app", // ✅ DOIT ÊTRE EXACTEMENT CECI
   process.env.FRONTEND_URL,
   process.env.DEPLOY_URL,
 ].filter(Boolean);
