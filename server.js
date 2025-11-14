@@ -60,10 +60,11 @@ app.use(
         console.log("🟢 CORS accepté (local):", origin);
         return callback(null, true);
       }
-      if (allowedOrigins.includes(origin)) {
+      if (allowedOrigins.some((url) => origin.startsWith(url))) {
         console.log("🟢 CORS accepté (prod):", origin);
         return callback(null, true);
       }
+
       console.warn("🚫 CORS refusé pour:", origin);
       return callback(new Error("Not allowed by CORS"));
     },
@@ -97,13 +98,15 @@ const securedRouter = Router();
 securedRouter.use(protect, activityLogger);
 securedRouter.use("/api/reservations", reservationRoutes);
 securedRouter.use("/api/trajets", trajetsRoutes);
-securedRouter.use("/api/settings", settingsRoutes);
 securedRouter.use("/api/reports", reportsRoutes);
 securedRouter.use("/api/notifications", notificationsRoutes);
 securedRouter.use("/api/users", usersRoutes);
 securedRouter.use("/api/monitoring", monitoringRoutes);
 
 app.use("/", securedRouter);
+
+// ✅ ROUTE PUBLIQUE POUR LES PARAMÈTRES GÉNÉRAUX
+app.use("/api/settings", settingsRoutes);
 
 // ======================================================
 // ⚡ SOCKET.IO SÉCURISÉ (AVEC AUTH JWT)
