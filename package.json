@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "migrate:places": "node ./scripts/migratePlacesRestantes.js"
+    "migrate:places": "node ./scripts/migratePlacesRestantes.js",
+    "check:deps": "npx depcheck"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
