@@ -70,6 +70,11 @@ app.use(cors({
 
 app.options("*", cors()); // ✅ préflight
 
+
+app.get("/api/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
 // ======================================================
 // 🔗 Routes publiques
 // ======================================================
